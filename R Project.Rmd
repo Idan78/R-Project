@@ -1,0 +1,482 @@
+##חלק א - טעינת נתונים ובדיקתם הראשונית
+
+#סעיף 1 - טעינת נתונים  
+
+```{r}
+install.packages("readxl")
+install.packages("dplyr")
+library(readxl)
+library(dplyr)
+
+SalesData<-read_excel("C:/Users/idanh/OneDrive/שולחן העבודה/SalesData.xlsx")
+View(SalesData)
+
+summary(SalesData)
+glimpse(SalesData)
+```
+
+
+#סעיף 2 - זיהוי סוגי משתנים
+
+```{r}
+str(SalesData)
+```
+
+
+#סעיף 3 - הגדרת תאריכים
+
+```{r}
+SalesData <- SalesData %>%
+  mutate(
+    Order_Date = as.Date(Order_Date, format = "%Y-%m-%d"),
+    Open_Date = as.Date(Open_Date, format = "%Y-%m-%d"),
+    ExchangeDate = as.Date(ExchangeDate, format = "%Y-%m-%d")
+  )
+```
+
+
+#סעיף 4 - זיהוי ערכים חסרים וערכים חריגים
+
+```{r}
+missing_values <- sapply(SalesData, function(x) sum(is.na(x)))
+print(missing_values)
+
+summary(SalesData)
+
+cleaned_data_rows <- na.omit(SalesData)
+cleaned_data_columns <- SalesData %>%
+  select_if(~ !any(is.na(.)))
+```
+
+
+# סעיף 5 - הגדרת פקטורים אורדינליים 
+
+```{r}
+SalesData <- SalesData %>%
+  mutate(Gender = factor(Gender, levels = c("Male", "Female"), ordered = TRUE))
+```
+
+
+
+##חלק ב - ספירת מספר הלקוחות לפי מין
+
+#סעיף 1 - ספירת מספר הלקוחות לפי מין
+
+```{r}
+customer_count_by_gender <- SalesData %>%
+  count(Gender)
+print(customer_count_by_gender)
+```
+
+
+#סעיף 2 - חישוב ממוצע גיל הלקוחות לפי מין
+
+```{r}
+current_year <- as.numeric(format(Sys.Date(), "%Y"))
+SalesData_with_age <- SalesData %>%
+  mutate(Age = 2024 - BirthYear)
+
+average_age_by_gender <- SalesData_with_age %>%
+  group_by(Gender) %>%
+  summarise(Average_Age = mean(Age, na.rm = TRUE))
+print(average_age_by_gender)
+```
+
+
+#סעיף 3 - ספירת מספר הלקוחות לפי עיר
+
+```{r}
+customer_count_by_city <- SalesData %>%
+  count(City)
+print(customer_count_by_city)
+```
+
+
+#סעיף 3 - ספירת מספר הלקוחות לפי עיר
+
+```{r}
+customer_count_by_city <- SalesData %>%
+  count(City)
+print(customer_count_by_city)
+```
+
+
+#סעיף 4 - חישוב סך המכירות לפי יבשת
+
+```{r}
+# חישוב סך המכירות לפי יבשת
+total_sales_by_continent <- SalesData %>%
+  group_by(Continent) %>%
+  summarise(TotalSales = sum(Quantity * Unit_Price_USD, na.rm = TRUE))
+print(total_sales_by_continent)
+```
+
+
+#סעיף 5 - התפלגות מכירות לפי קבוצות גיל
+
+```{r}
+SalesData <- SalesData %>%
+  mutate(Age = 2024 - BirthYear)  
+
+SalesData <- SalesData %>%
+  mutate(AgeGroup = case_when(
+    Age <= 18 ~ "0-18",
+    Age >= 19 & Age <= 35 ~ "19-35",
+    Age >= 36 & Age <= 50 ~ "36-50",
+    Age >= 51 ~ "51+",
+    TRUE ~ "Unknown"  # 
+  ))
+
+sales_by_age_group <- SalesData %>%
+  group_by(AgeGroup) %>%
+  summarise(TotalSales = sum(Quantity * Unit_Price_USD, na.rm = TRUE))
+print(sales_by_age_group)
+```
+
+
+#סעיף 6 - חישוב סך המכירות לפי מדינה
+
+```{r}
+sales_by_country <- SalesData %>%
+  group_by(StoreCountry) %>%
+  summarise(TotalSales = sum(Quantity * Unit_Price_USD, na.rm = TRUE))
+print(sales_by_country)
+```
+
+
+
+##חלק ג - ניתוח מכירות לפי מוצרים וחנויות
+
+#סעיף 1 - סיווג מוצרים לפי רמות מכירה  
+
+```{r}
+SalesData <- SalesData %>%
+  mutate(TotalSales = Quantity * Unit_Price_USD)
+
+product_sales <- SalesData %>%
+  group_by(Product_Name) %>%
+  summarise(TotalSales = sum(TotalSales, na.rm = TRUE))
+
+product_sales <- product_sales %>%
+  mutate(Sales_Level = case_when(
+    TotalSales <= quantile(TotalSales, 0.33) ~ "Low",
+    TotalSales <= quantile(TotalSales, 0.66) ~ "Medium",
+    TRUE ~ "High"
+  ))
+
+print(product_sales)
+```
+
+
+#סעיף 2 - זיהוי המוצרים עם הביצועים הטובים ביותר
+
+```{r}
+product_sales <- SalesData %>%
+  group_by(Product_Name) %>%
+  summarise(TotalSales = sum(TotalSales, na.rm = TRUE))
+percentile_90 <- quantile(product_sales$TotalSales, probs = 0.90, na.rm = TRUE)
+top_performance_products <- product_sales %>%
+  filter(TotalSales >= percentile_90)
+print(top_performance_products)
+```
+
+
+#סעיף 3 - ניתוח מכירות לפי עונות השנה
+
+```{r}
+library(dplyr)
+get_season <- function(date) {
+  month <- as.numeric(format(date, "%m"))  
+  if (month %in% c(12, 1, 2)) {  # חורף
+    return("Winter")
+  } else if (month %in% c(3, 4, 5)) {  # אביב
+    return("Spring")
+  } else if (month %in% c(6, 7, 8)) {  # קיץ
+    return("Summer")
+  } else if (month %in% c(9, 10, 11)) {  # סתיו
+    return("Fall")
+  } else {
+    return(NA) 
+  }
+}
+
+SalesData <- SalesData %>%
+  mutate(Order_Date = as.Date(Order_Date, format = "%Y-%m-%d"),  
+    Season = sapply(Order_Date, get_season),
+    TotalSales = Unit_Price_USD * Quantity)
+
+season_sales <- SalesData %>%
+  group_by(Season) %>%
+  summarise(TotalSales = sum(TotalSales, na.rm = TRUE)) 
+
+print(season_sales)
+```
+
+
+#סעיף 4 - חישוב ממוצע רווח גולמי לפי מוצר
+
+```{r}
+SalesData <- SalesData %>%
+  mutate(
+    Unit_Price_USD = as.numeric(Unit_Price_USD),
+    Unit_Cost_USD = as.numeric(Unit_Cost_USD),
+    GrossProfit = Unit_Price_USD - Unit_Cost_USD
+  )
+
+product_gross_profit <- SalesData %>%
+  group_by(Product_Name) %>%
+  summarise(
+    TotalGrossProfit = sum(GrossProfit * Quantity, na.rm = TRUE),
+    TotalQuantity = sum(Quantity, na.rm = TRUE)
+  )
+
+average_gross_profit <- product_gross_profit %>%
+  mutate(AverageGrossProfit = TotalGrossProfit / TotalQuantity)
+
+print(average_gross_profit)
+```
+
+
+
+##חלק ד - ניתוח השפעת שערי ההמרה
+
+#סעיף 1 - חישוב סך המכירות לכל מטבע
+
+```{r}
+sales_by_currency <- SalesData %>%
+  group_by(Currency_Code) %>%
+  summarise(
+    TotalSales = sum(Unit_Price_USD * Quantity, na.rm = TRUE)
+  )
+
+print(sales_by_currency)
+```
+
+
+#סעיף 2 - המרת מכירות למטבע אחיד
+
+```{r}
+SalesData <- SalesData %>%
+  mutate(
+    TotalSales = as.numeric(as.character(TotalSales)),
+    Exchange = as.numeric(as.character(Exchange))
+  )
+SalesData <- SalesData %>%
+  mutate(Total_Price_USD = TotalSales * Exchange)
+print(SalesData)
+```
+
+
+#סעיף 3 - השוואת מכירות בין מטבעות שונים
+
+```{r}
+SalesData <- SalesData %>%
+  mutate(Total_Price_USD = TotalSales * Exchange) 
+TotalSalesByCurrency <- SalesData %>%
+  group_by(Currency_Code) %>%
+  summarise(TotalSales_USD = sum(Total_Price_USD, na.rm = TRUE))
+
+TotalSalesOverall <- sum(TotalSalesByCurrency$TotalSales_USD, na.rm = TRUE)
+TotalSalesByCurrency <- TotalSalesByCurrency %>%
+  mutate(PercentageOfTotal = (TotalSales_USD / TotalSalesOverall) * 100)
+print(TotalSalesByCurrency)
+```
+
+
+#סעיף 4 - חישוב ממוצע שער ההמרה לכל מטבע
+
+```{r}
+SalesData$Exchange <- as.numeric(as.character(SalesData$Exchange))
+
+# חישוב ממוצע שער ההמרה לכל מטבע
+AverageExchangeRateByCurrency <- SalesData %>%
+  group_by(Currency_Code) %>%
+  summarise(AverageExchange = mean(Exchange, na.rm = TRUE))
+
+# הצגת התוצאה
+print(AverageExchangeRateByCurrency)
+```
+
+
+#סעיף 5 - חישוב סטיית התקן של שער ההמרה לכל מטבע
+
+```{r}
+SalesData$Exchange <- as.numeric(as.character(SalesData$Exchange))
+
+StandardDeviationByCurrency <- SalesData %>%
+  group_by(Currency_Code) %>%
+  summarise(StandardDeviation = sd(Exchange, na.rm = TRUE))
+
+print(StandardDeviationByCurrency)
+```
+
+
+#חלק ה - כתיבת פונקציה מותאמת אישית
+
+##סעיף 1+2
+
+```{r}
+numeric_stats <- function(data) {
+  numeric_cols <- sapply(data, is.numeric)
+  stats <- data.frame(
+    Column = names(data)[numeric_cols], 
+    Min = sapply(data[, numeric_cols], min, na.rm = TRUE),  
+    Max = sapply(data[, numeric_cols], max, na.rm = TRUE),  
+    Mean = sapply(data[, numeric_cols], mean, na.rm = TRUE),  
+    Median = sapply(data[, numeric_cols], median, na.rm = TRUE)  
+  )
+  
+  return(stats)
+}
+
+numeric_stats_only <- numeric_stats(SalesData)
+print(numeric_stats_only)
+```
+
+
+#חלק ו - ויזואליזציה של הנתונים
+
+##סעיף 1 - סיווג מוצרים לפי רמות מכירה
+
+```{r}
+library(ggplot2)
+sales_levels_count <- product_sales %>%
+  group_by(Sales_Level) %>%
+  summarise(Count = n())
+
+ggplot(sales_levels_count, aes(x = Sales_Level, y = Count, fill = Sales_Level)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(
+    title = "מספר המוצרים לפי רמות מכירה",
+    x = "רמת מכירה",
+    y = "מספר מוצרים"
+  ) +
+  scale_fill_manual(values = c("Low" = "yellow", "Medium" = "green", "High" = "red")) +
+  theme(text = element_text(size = 12)) # אפשרות להתאים את גודל הטקסט
+```
+
+
+#סעיף 2 -	זיהוי המוצרים עם הביצועים הטובים ביותר
+
+
+```{r}
+product_sales <- SalesData %>%
+  group_by(Product_Name) %>%
+  summarise(TotalSales = sum(TotalSales, na.rm = TRUE))
+percentile_90 <- quantile(product_sales$TotalSales, probs = 0.90, na.rm = TRUE)
+
+top_performance_products <- product_sales %>%
+  filter(TotalSales >= percentile_90)
+
+ggplot(top_performance_products, aes(x = reorder(Product_Name, TotalSales), y = TotalSales)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  coord_flip() +
+  labs(
+    title = "המוצרים עם הביצועים הטובים ביותר",
+    x = "שם המוצר",
+    y = "סך המכירות"
+  ) +
+  theme_minimal() +
+  theme(text = element_text(size = 12))
+```
+
+
+
+#סעיף 3 -	ניתוח מכירות לפי עונות השנה
+
+```{r}
+get_season <- function(date) {
+  month <- as.numeric(format(date, "%m"))
+  if (month %in% c(12, 1, 2)) {
+    return("Winter")
+  } else if (month %in% c(3, 4, 5)) {
+    return("Spring")
+  } else if (month %in% c(6, 7, 8)) {
+    return("Summer")
+  } else if (month %in% c(9, 10, 11)) {
+    return("Fall")
+  } else {
+    return(NA)
+  }
+}
+
+SalesData <- SalesData %>%
+  mutate(Order_Date = as.Date(Order_Date, format = "%Y-%m-%d"),
+         Season = sapply(Order_Date, get_season),
+         TotalSales = Quantity * Unit_Price_USD)
+
+season_sales <- SalesData %>%
+  group_by(Season) %>%
+  summarise(TotalSales = sum(TotalSales, na.rm = TRUE))
+
+ggplot(season_sales, aes(x = Season, y = TotalSales, fill = Season)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_fill_manual(values = c("Winter" = "blue", "Spring" = "green", "Summer" = "yellow", "Fall" = "orange")) +
+  labs(
+    title = "סך המכירות לפי עונות השנה",
+    x = "עונת השנה",
+    y = "סך המכירות"
+  ) +
+  theme_minimal() +
+  theme(text = element_text(size = 12))
+```
+
+
+#סעיף 4 -	השוואת מכירות בין מטבעות שונים
+
+```{r}
+ggplot(TotalSalesByCurrency, aes(x = reorder(Currency_Code, TotalSales_USD), y = TotalSales_USD, fill = Currency_Code)) +
+  geom_bar(stat = "identity", color = "black") +
+  geom_text(aes(label = paste0(round(PercentageOfTotal, 1), "%")), vjust = -0.5) +
+  labs(title = "השוואת מכירות בין מטבעות שונים",
+       x = "מטבע",
+       y = "סך מכירות (ב-USD)",
+       caption = "הערות: טקסטים מייצגים את האחוז מכלל הסך") +
+  scale_fill_manual(values = c("USD" = "blue", "EUR" = "green", "JPY" = "red", "GBP" = "purple")) +
+  theme_minimal() +
+  theme(text = element_text(size = 12))
+```
+
+
+
+##חלק ז - חקר תובנות מותאם אישית
+
+#אופציה 1 - התפלגות המכירות לפי ימים בשבוע
+
+```{r}
+SalesData <- SalesData %>%
+  mutate(DayOfWeek = weekdays(Order_Date))
+sales_by_day <- SalesData %>%
+  mutate(TotalSales = Unit_Price_USD * Quantity) %>%
+  group_by(DayOfWeek) %>%
+  summarise(TotalSales = sum(TotalSales, na.rm = TRUE))
+ggplot(sales_by_day, aes(x = reorder(DayOfWeek, TotalSales), y = TotalSales, fill = DayOfWeek)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(title = "סך המכירות לפי ימים בשבוע",
+       x = "יום בשבוע",
+       y = "סך מכירות") +
+  scale_fill_brewer(palette = "Pastel1") +
+  theme_minimal() +
+  theme(text = element_text(size = 12))
+```
+
+
+#אופציה 2 - התפלגות המכירות לפי עונות שנה 
+
+```{r}
+season_sales <- SalesData %>%
+  mutate(TotalSales = Unit_Price_USD * Quantity) %>%
+  group_by(Season) %>%
+  summarise(TotalSales = sum(TotalSales, na.rm = TRUE))
+print(season_sales)
+ggplot(season_sales, aes(x = reorder(Season, TotalSales), y = TotalSales, fill = Season)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_fill_manual(values = c("Winter" = "blue", "Spring" = "green", "Summer" = "yellow", "Fall" = "orange")) +
+  labs(title = "סך המכירות לפי עונות השנה",
+       x = "עונה",
+       y = "סך מכירות") +
+  theme_minimal() +
+  theme(text = element_text(size = 12))
+```
+- 
